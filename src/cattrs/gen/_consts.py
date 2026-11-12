@@ -17,3 +17,8 @@ class AttributeOverride:
 
 neutral = AttributeOverride()
 already_generating = local()
+
+#: Attribute set on built-in composite hooks (classes, containers, ...) so
+#: the explicit-stack engine in ``cattrs._deep`` can recognize and drive
+#: them iteratively. User-registered and leaf hooks never have it set.
+ITERATIVE_MARKER = "_cattrs_iterative"

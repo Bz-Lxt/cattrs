@@ -30,7 +30,12 @@ from ..errors import (
 )
 from ..fns import identity
 from ..types import SimpleStructureHook
-from ._consts import AttributeOverride, already_generating, neutral
+from ._consts import (
+    ITERATIVE_MARKER,
+    AttributeOverride,
+    already_generating,
+    neutral,
+)
 from ._generics import generate_mapping
 from ._lc import generate_unique_filename
 from ._shared import _annotated_override_or_default, find_structure_handler
@@ -252,6 +257,7 @@ def make_dict_unstructure_fn_from_attrs(
 
     res = globs[fn_name]
     res.overrides = kwargs
+    setattr(res, ITERATIVE_MARKER, True)
 
     return res
 
@@ -754,6 +760,7 @@ def make_dict_structure_fn_from_attrs(
 
     res = globs[fn_name]
     res.overrides = kwargs
+    setattr(res, ITERATIVE_MARKER, True)
 
     return res
 
@@ -960,7 +967,9 @@ def make_hetero_tuple_structure_fn(
         cl, "structure", lines=script.splitlines() if use_linecache else []
     )
     eval(compile(script, fname, "exec"), globs)
-    return globs[fn_name]
+    res = globs[fn_name]
+    setattr(res, ITERATIVE_MARKER, True)
+    return res
 
 
 def make_hetero_tuple_unstructure_fn(
@@ -1005,7 +1014,9 @@ def make_hetero_tuple_unstructure_fn(
 
     eval(compile("\n".join(total_lines), "", "exec"), globs)
 
-    return globs[fn_name]
+    res = globs[fn_name]
+    setattr(res, ITERATIVE_MARKER, True)
+    return res
 
 
 MappingUnstructureFn = Callable[[Mapping[Any, Any]], Any]
@@ -1071,7 +1082,9 @@ def mapping_unstructure_factory(
 
     eval(compile("\n".join(lines), "", "exec"), globs)
 
-    return globs[fn_name]
+    res = globs[fn_name]
+    setattr(res, ITERATIVE_MARKER, True)
+    return res
 
 
 make_mapping_unstructure_fn: Final = mapping_unstructure_factory
@@ -1199,7 +1212,9 @@ def mapping_structure_factory(
 
     eval(compile(script, "", "exec"), globs)
 
-    return globs[fn_name]
+    res = globs[fn_name]
+    setattr(res, ITERATIVE_MARKER, True)
+    return res
 
 
 make_mapping_structure_fn: Final = mapping_structure_factory
@@ -1235,6 +1250,7 @@ def iterable_unstructure_factory(
     def unstructure_iterable(iterable, _seq_cl=unstructure_to or cl, _hook=handler):
         return _seq_cl(_hook(i) for i in iterable)
 
+    setattr(unstructure_iterable, ITERATIVE_MARKER, True)
     return unstructure_iterable
 
 

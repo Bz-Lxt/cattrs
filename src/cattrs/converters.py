@@ -103,8 +103,11 @@ from .gen import (
     make_hetero_tuple_structure_fn,
     make_hetero_tuple_unstructure_fn,
 )
+from .gen._consts import ITERATIVE_MARKER
 from .gen.typeddicts import make_dict_structure_fn as make_typeddict_dict_struct_fn
 from .gen.typeddicts import make_dict_unstructure_fn as make_typeddict_dict_unstruct_fn
+from ._deep import _state as _deep_state
+from ._deep import deep_structure, deep_unstructure, is_recursion_failure
 from .literals import is_literal_containing_enums
 from .sentinels import (
     is_sentinel,
@@ -357,9 +360,21 @@ class BaseConverter:
         self._struct_copy_skip = self._structure_func.get_num_fns()
 
     def unstructure(self, obj: Any, unstructure_as: Any = None) -> Any:
-        return self._unstructure_func.dispatch(
-            obj.__class__ if unstructure_as is None else unstructure_as
-        )(obj)
+        # While the explicit-stack engine is running, re-entering the
+        # converter must stay on the engine instead of recursing again.
+        if getattr(_deep_state, "active", False):
+            return deep_unstructure(self, obj, unstructure_as)
+        try:
+            return self._unstructure_func.dispatch(
+                obj.__class__ if unstructure_as is None else unstructure_as
+            )(obj)
+        except BaseException as exc:
+            # Data nested deeper than the process-wide recursion limit
+            # overflows the call stack; retry the same conversion on an
+            # explicit stack. The recursion limit itself is never touched.
+            if not is_recursion_failure(exc):
+                raise
+            return deep_unstructure(self, obj, unstructure_as)
 
     @property
     def unstruct_strat(self) -> UnstructureStrategy:
@@ -635,7 +650,19 @@ class BaseConverter:
             The target type is now annotated with ``TypeForm`` to support
             stronger type hints.
         """
-        return self._structure_func.dispatch(cl)(obj, cl)
+        # While the explicit-stack engine is running, re-entering the
+        # converter must stay on the engine instead of recursing again.
+        if getattr(_deep_state, "active", False):
+            return deep_structure(self, obj, cl)
+        try:
+            return self._structure_func.dispatch(cl)(obj, cl)
+        except BaseException as exc:
+            # Data nested deeper than the process-wide recursion limit
+            # overflows the call stack; retry the same conversion on an
+            # explicit stack. The recursion limit itself is never touched.
+            if not is_recursion_failure(exc):
+                raise
+            return deep_structure(self, obj, cl)
 
     def get_structure_hook(
         self, type: TypeForm[T], cache_result: bool = True
@@ -1096,6 +1123,25 @@ class BaseConverter:
         self._structure_func.copy_to(res._structure_func, self._struct_copy_skip)
 
         return res
+
+
+# Mark the built-in composite hooks so the explicit-stack engine in
+# ``cattrs._deep`` can recognize and drive them iteratively. Hooks registered
+# by users never carry this marker and keep being called directly.
+for _built_in_hook in (
+    BaseConverter.unstructure_attrs_asdict,
+    BaseConverter.unstructure_attrs_astuple,
+    BaseConverter._unstructure_seq,
+    BaseConverter._unstructure_mapping,
+    BaseConverter.structure_attrs_fromtuple,
+    BaseConverter.structure_attrs_fromdict,
+    BaseConverter._structure_deque,
+    BaseConverter._structure_set,
+    BaseConverter._structure_frozenset,
+    BaseConverter._structure_dict,
+    BaseConverter._structure_tuple,
+):
+    setattr(_built_in_hook, ITERATIVE_MARKER, True)
 
 
 class Converter(BaseConverter):

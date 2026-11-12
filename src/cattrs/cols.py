@@ -36,6 +36,7 @@ from .gen import (
     mapping_unstructure_factory,
 )
 from .gen import make_iterable_unstructure_fn as iterable_unstructure_factory
+from .gen._consts import ITERATIVE_MARKER
 
 if TYPE_CHECKING:
     from .converters import BaseConverter
@@ -151,6 +152,7 @@ def list_structure_factory(type: type, converter: BaseConverter) -> StructureHoo
         ) -> list[T]:
             return [_handler(e, _elem_type) for e in obj]
 
+    setattr(structure_list, ITERATIVE_MARKER, True)
     return structure_list
 
 
@@ -191,6 +193,7 @@ def homogenous_tuple_structure_factory(
         ) -> tuple[T, ...]:
             return tuple([_handler(e, _elem_type) for e in obj])
 
+    setattr(structure_tuple, ITERATIVE_MARKER, True)
     return structure_tuple
 
 
@@ -220,7 +223,12 @@ def namedtuple_structure_factory(
     # We delegate to the existing infrastructure for heterogeneous tuples.
     hetero_tuple_type = tuple[tuple(cl.__annotations__.values())]
     base_hook = converter.get_structure_hook(hetero_tuple_type)
-    return lambda v, _: cl(*base_hook(v, hetero_tuple_type))
+
+    def structure_namedtuple(v, _=None, _hook=base_hook, _type=hetero_tuple_type, _cl=cl):
+        return _cl(*_hook(v, _type))
+
+    setattr(structure_namedtuple, ITERATIVE_MARKER, True)
+    return structure_namedtuple
 
 
 def _namedtuple_to_attrs(cl: type[tuple]) -> list[Attribute]:

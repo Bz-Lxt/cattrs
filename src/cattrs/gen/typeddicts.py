@@ -26,7 +26,7 @@ from ..errors import (
 )
 from ..fns import identity
 from . import AttributeOverride
-from ._consts import already_generating, neutral
+from ._consts import ITERATIVE_MARKER, already_generating, neutral
 from ._generics import generate_mapping
 from ._lc import generate_unique_filename
 from ._shared import _annotated_override_or_default, find_structure_handler
@@ -229,6 +229,7 @@ def make_dict_unstructure_fn(
 
         res = globs[fn_name]
         res.overrides = kwargs
+        setattr(res, ITERATIVE_MARKER, True)
     finally:
         working_set.remove(cl)
         if not working_set:
@@ -542,6 +543,7 @@ def make_dict_structure_fn(
     eval(compile(script, fname, "exec"), globs)
     res = globs[fn_name]
     res.overrides = kwargs
+    setattr(res, ITERATIVE_MARKER, True)
     return res
 
 
